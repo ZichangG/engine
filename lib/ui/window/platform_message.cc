@@ -6,10 +6,10 @@
 
 #include <utility>
 
-namespace blink {
+namespace flutter {
 
 PlatformMessage::PlatformMessage(std::string channel,
-                                 std::vector<uint8_t> data,
+                                 fml::MallocMapping data,
                                  fml::RefPtr<PlatformMessageResponse> response)
     : channel_(std::move(channel)),
       data_(std::move(data)),
@@ -24,4 +24,4 @@ PlatformMessage::PlatformMessage(std::string channel,
 
 PlatformMessage::~PlatformMessage() = default;
 
-}  // namespace blink
+}  // namespace flutter

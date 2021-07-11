@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// See README in this directory for information on how this code is organised.
+// See README in this directory for information on how this code is organized.
 
 import 'dart:async';
 import 'dart:collection';
@@ -53,10 +53,12 @@ abstract class _RepositoryLicensedFile extends _RepositoryFile {
 
   // file names that we are confident won't be included in the final build product
   static final RegExp _readmeNamePattern = RegExp(r'\b_*(?:readme|contributing|patents)_*\b', caseSensitive: false);
-  static final RegExp _buildTimePattern = RegExp(r'^(?!.*gen$)(?:CMakeLists\.txt|(?:pkgdata)?Makefile(?:\.inc)?(?:\.am|\.in|)|configure(?:\.ac|\.in)?|config\.(?:sub|guess)|.+\.m4|install-sh|.+\.sh|.+\.bat|.+\.pyc?|.+\.pl|icu-configure|.+\.gypi?|.*\.gni?|.+\.mk|.+\.cmake|.+\.gradle|.+\.yaml|pubspec\.lock|\.packages|vms_make\.com|pom\.xml|\.project|source\.properties)$', caseSensitive: false);
-  static final RegExp _docsPattern = RegExp(r'^(?:INSTALL|NEWS|OWNERS|AUTHORS|ChangeLog(?:\.rst|\.[0-9]+)?|.+\.txt|.+\.md|.+\.log|.+\.css|.+\.1|doxygen\.config|.+\.spec(?:\.in)?)$', caseSensitive: false);
-  static final RegExp _devPattern = RegExp(r'^(?:codereview\.settings|.+\.~|.+\.~[0-9]+~|\.clang-format|\.gitattributes|\.landmines|\.DS_Store|\.travis\.yml|\.cirrus\.yml)$', caseSensitive: false);
+  static final RegExp _buildTimePattern = RegExp(r'^(?!.*gen$)(?:CMakeLists\.txt|(?:pkgdata)?Makefile(?:\.inc)?(?:\.am|\.in|)|configure(?:\.ac|\.in)?|config\.(?:sub|guess)|.+\.m4|install-sh|.+\.sh|.+\.bat|.+\.pyc?|.+\.pl|icu-configure|.+\.gypi?|.*\.gni?|.+\.mk|.+\.cmake|.+\.gradle|.+\.yaml|pubspec\.lock|\.packages|vms_make\.com|pom\.xml|\.project|source\.properties|.+\.obj|.+\.autopkg)$', caseSensitive: false);
+  static final RegExp _docsPattern = RegExp(r'^(?:INSTALL|NEWS|OWNERS|AUTHORS|ChangeLog(?:\.rst|\.[0-9]+)?|.+\.txt|.+\.md|.+\.log|.+\.css|.+\.1|doxygen\.config|Doxyfile|.+\.spec(?:\.in)?)$', caseSensitive: false);
+  static final RegExp _devPattern = RegExp(r'^(?:codereview\.settings|.+\.~|.+\.~[0-9]+~|\.clang-format|\.gitattributes|\.landmines|\.DS_Store|\.travis\.yml|\.cirrus\.yml|\.cache)$', caseSensitive: false);
   static final RegExp _testsPattern = RegExp(r'^(?:tj(?:bench|example)test\.(?:java\.)?in|example\.c)$', caseSensitive: false);
+  // The ICU library has sample code that will never get linked.
+  static final RegExp _icuSamplesPattern = RegExp(r'.*(?:icu\/source\/samples).*$', caseSensitive: false);
 
   bool get isIncludedInBuildProducts {
     return !io.name.contains(_readmeNamePattern)
@@ -64,6 +66,7 @@ abstract class _RepositoryLicensedFile extends _RepositoryFile {
         && !io.name.contains(_docsPattern)
         && !io.name.contains(_devPattern)
         && !io.name.contains(_testsPattern)
+        && !io.toString().contains(_icuSamplesPattern)
         && !isShellScript;
   }
 
@@ -171,9 +174,6 @@ abstract class _RepositorySingleLicenseFile extends _RepositoryLicenseFile {
 class _RepositoryGeneralSingleLicenseFile extends _RepositorySingleLicenseFile {
   _RepositoryGeneralSingleLicenseFile(_RepositoryDirectory parent, fs.TextFile io)
     : super(parent, io, License.fromBodyAndName(io.readString(), io.name, origin: io.fullName));
-
-  _RepositoryGeneralSingleLicenseFile.fromLicense(_RepositoryDirectory parent, fs.TextFile io, License license)
-    : super(parent, io, license);
 
   @override
   License licenseOfType(LicenseType type) {
@@ -293,15 +293,6 @@ class _RepositoryDartLicenseFile extends _RepositorySingleLicenseFile {
     : super(parent, io, _parseLicense(io));
 
   static final RegExp _pattern = RegExp(
-    r'^This license applies to all parts of Dart that are not externally\n'
-    r'maintained libraries\. The external maintained libraries used by\n'
-    r'Dart are:\n'
-    r'\n'
-    r'(?:.+\n)+'
-    r'\n'
-    r'The libraries may have their own licenses; we recommend you read them,\n'
-    r'as their terms may differ from the terms below\.\n'
-    r'\n'
     r'(Copyright (?:.|\n)+)$',
     caseSensitive: false
   );
@@ -327,9 +318,8 @@ class _RepositoryLibPngLicenseFile extends _RepositorySingleLicenseFile {
 
   static void _verifyLicense(fs.TextFile io) {
     final String contents = io.readString();
-    if (!contents.contains('COPYRIGHT NOTICE, DISCLAIMER, and LICENSE:') ||
-        !contents.contains('png') ||
-        !contents.contains('END OF COPYRIGHT NOTICE, DISCLAIMER, and LICENSE.'))
+    if (!contents.contains(RegExp('COPYRIGHT NOTICE, DISCLAIMER, and LICENSE:?')) ||
+        !contents.contains('png'))
       throw 'unexpected libpng license file contents:\n----8<----\n$contents\n----<8----';
   }
 
@@ -811,9 +801,8 @@ class _RepositoryCxxStlDualLicenseFile extends _RepositoryLicenseFile {
     : _licenses = _parseLicenses(io), super(parent, io);
 
   static final RegExp _pattern = RegExp(
-    r'^'
     r'==============================================================================\n'
-    r'.+ License\n'
+    r'.+ License.*\n'
     r'==============================================================================\n'
     r'\n'
     r'The .+ library is dual licensed under both the University of Illinois\n'
@@ -840,7 +829,7 @@ class _RepositoryCxxStlDualLicenseFile extends _RepositoryLicenseFile {
     ];
   }
 
-  List<License> _licenses;
+  final List<License> _licenses;
 
   @override
   List<License> licensesFor(String name) {
@@ -925,17 +914,32 @@ class _RepositoryDirectory extends _RepositoryEntry implements LicenseSource {
   // direct child of this directory's filesystem node.
   List<_RepositoryDirectory> get virtualSubdirectories => <_RepositoryDirectory>[];
 
+  /// Standard directory names containing files that should be ignored by the
+  /// license script.
+  ///
+  /// Do not include repository-level directories here. Instead use one of:
+  ///
+  /// - [_RepositoryFlutterDirectory], to filter specific sub-directories at the
+  ///   flutter/engine repository level.
+  /// - [_EngineSrcDirectory], to filter specific sub-directories under the src/
+  ///   directory (a.k.a. buildroot).
   bool shouldRecurse(fs.IoNode entry) {
-    return entry.name != '.cipd' &&
-           entry.name != '.git' &&
-           entry.name != '.github' &&
-           entry.name != '.gitignore' &&
-           entry.name != 'test' &&
-           entry.name != 'test.disabled' &&
-           entry.name != 'test_support' &&
-           entry.name != 'tests' &&
-           entry.name != 'javatests' &&
-           entry.name != 'testing';
+    return !entry.fullName.endsWith('third_party/gn') &&
+            entry.name != '.cipd' &&
+            entry.name != '.git' &&
+            entry.name != '.github' &&
+            entry.name != '.gitignore' &&
+            entry.name != '.vscode' &&
+            entry.name != 'test' &&
+            entry.name != 'test.disabled' &&
+            entry.name != 'test_support' &&
+            entry.name != 'testdata' &&
+            entry.name != 'tests' &&
+            entry.name != 'javatests' &&
+            entry.name != 'testing' &&
+            entry.name != '.dart_tool';  // Generated by various Dart tools, such as pub and
+                                         // build_runner. Skip it because it does not contain
+                                         // source code.
   }
 
   _RepositoryDirectory createSubdirectory(fs.Directory entry) {
@@ -1172,7 +1176,7 @@ class _RepositoryDirectory extends _RepositoryEntry implements LicenseSource {
   }
 
   Set<License> getLicenses(_Progress progress) {
-    final Set<License> result = Set<License>();
+    final Set<License> result = <License>{};
     for (_RepositoryDirectory directory in _subdirectories)
       result.addAll(directory.getLicenses(progress));
     for (_RepositoryLicensedFile file in _files) {
@@ -1184,7 +1188,7 @@ class _RepositoryDirectory extends _RepositoryEntry implements LicenseSource {
           result.addAll(licenses);
           progress.advance(success: true);
         } catch (e, stack) {
-          system.stderr.writeln('error searching for copyright in: ${file.io}\n$e');
+          system.stderr.writeln('\nerror searching for copyright in: ${file.io}\n$e');
           if (e is! String)
             system.stderr.writeln(stack);
           system.stderr.writeln('\n');
@@ -1304,6 +1308,44 @@ class _RepositoryExcludeSubpathDirectory extends _RepositoryDirectory {
 
 // WHAT TO CRAWL AND WHAT NOT TO CRAWL
 
+class _RepositoryAngleDirectory extends _RepositoryDirectory {
+  _RepositoryAngleDirectory(_RepositoryDirectory parent, fs.Directory io) : super(parent, io);
+
+  @override
+  _RepositoryDirectory createSubdirectory(fs.Directory entry) {
+    if (entry.name == 'src')
+      return _RepositoryAngleSrcDirectory(this, entry);
+    return super.createSubdirectory(entry);
+  }
+
+  @override
+  bool shouldRecurse(fs.IoNode entry) {
+    return entry.name != 'tools' // These are build-time tools, and aren't shipped.
+        && super.shouldRecurse(entry);
+  }
+}
+
+class _RepositoryAngleSrcDirectory extends _RepositoryDirectory {
+  _RepositoryAngleSrcDirectory(_RepositoryDirectory parent, fs.Directory io) : super(parent, io);
+
+  @override
+  _RepositoryDirectory createSubdirectory(fs.Directory entry) {
+    if (entry.name == 'third_party')
+      return _RepositoryAngleSrcThirdPartyDirectory(this, entry);
+    return super.createSubdirectory(entry);
+  }
+}
+
+class _RepositoryAngleSrcThirdPartyDirectory extends _RepositoryDirectory {
+  _RepositoryAngleSrcThirdPartyDirectory(_RepositoryDirectory parent, fs.Directory io) : super(parent, io);
+
+  @override
+  bool shouldRecurse(fs.IoNode entry) {
+    return entry.name != 'volk' // We don't use Vulkan in our ANGLE build.
+        && super.shouldRecurse(entry);
+  }
+}
+
 class _RepositoryAndroidPlatformDirectory extends _RepositoryDirectory {
   _RepositoryAndroidPlatformDirectory(_RepositoryDirectory parent, fs.Directory io) : super(parent, io);
 
@@ -1344,7 +1386,7 @@ class _RepositoryFreetypeDocsDirectory extends _RepositoryDirectory {
     // We don't ship anything in this directory so don't bother looking for licenses there.
     // However, there are licenses in this directory referenced from elsewhere, so we do
     // want to crawl it and expose them.
-    return Set<License>();
+    return <License>{};
   }
 }
 
@@ -1429,6 +1471,18 @@ class _RepositoryFreetypeDirectory extends _RepositoryDirectory {
     if (entry.name == 'docs')
       return _RepositoryFreetypeDocsDirectory(this, entry);
     return super.createSubdirectory(entry);
+  }
+}
+
+class _RepositoryGlfwDirectory extends _RepositoryDirectory {
+  _RepositoryGlfwDirectory(_RepositoryDirectory parent, fs.Directory io) : super(parent, io);
+
+  @override
+  bool shouldRecurse(fs.IoNode entry) {
+    return entry.name != 'examples' // Not linked in build.
+        && entry.name != 'tests' // Not linked in build.
+        && entry.name != 'deps' // Only used by examples and tests; not linked in build.
+        && super.shouldRecurse(entry);
   }
 }
 
@@ -1578,6 +1632,24 @@ class _RepositoryLibPngDirectory extends _RepositoryDirectory {
       return _RepositoryLibPngLicenseFile(this, entry);
     return super.createFile(entry);
   }
+
+  static final RegExp skipFileTypes = RegExp(r'\.(?:jpg|png|dfa|in|3|5)$');
+
+  @override
+  bool shouldRecurse(fs.IoNode entry) {
+    return entry.name != 'contrib' // not linked in
+      && entry.name != 'mips' // not linked in
+      && entry.name != 'powerpc' // not linked in
+      && entry.name != 'projects' // not linked in
+      && entry.name != 'scripts' // not linked in
+      && entry.name != 'tests' // not linked in
+      && entry.name != 'ANNOUNCE'
+      && entry.name != 'CHANGES'
+      && entry.name != 'TODO'
+      && entry.name != 'TRADEMARK'
+      && !entry.name.contains(skipFileTypes)
+      && super.shouldRecurse(entry);
+  }
 }
 
 class _RepositoryLibWebpDirectory extends _RepositoryDirectory {
@@ -1594,6 +1666,21 @@ class _RepositoryLibWebpDirectory extends _RepositoryDirectory {
 
 class _RepositoryPkgDirectory extends _RepositoryDirectory {
   _RepositoryPkgDirectory(_RepositoryDirectory parent, fs.Directory io) : super(parent, io);
+
+  @override
+  bool shouldRecurse(fs.IoNode entry) {
+    return entry.name != 'archive'  // contains nothing that ends up in the binary executable
+      && entry.name != 'equatable'
+      && entry.name != 'file'
+      && entry.name != 'flutter_packages'
+      && entry.name != 'gcloud'
+      && entry.name != 'googleapis'
+      && entry.name != 'isolate'
+      && entry.name != 'platform'
+      && entry.name != 'process'
+      && entry.name != 'process_runner'
+      && entry.name != 'vector_math';
+  }
 
   @override
   _RepositoryDirectory createSubdirectory(fs.Directory entry) {
@@ -1619,7 +1706,7 @@ class _RepositorySkiaLibWebPDirectory extends _RepositoryDirectory {
   @override
   _RepositoryDirectory createSubdirectory(fs.Directory entry) {
     if (entry.name == 'webp')
-      return _RepositoryReachOutDirectory(this, entry, Set<String>.from(const <String>['config.h']), 3);
+      return _RepositoryReachOutDirectory(this, entry, const <String>{'config.h'}, 3);
     return super.createSubdirectory(entry);
   }
 }
@@ -1639,6 +1726,7 @@ class _RepositorySkiaThirdPartyDirectory extends _RepositoryGenericThirdPartyDir
     return entry.name != 'giflib' // contains nothing that ends up in the binary executable
         && entry.name != 'freetype' // we use our own version
         && entry.name != 'freetype2' // we use our own version
+        && entry.name != 'gif' // not linked in
         && entry.name != 'icu' // we use our own version
         && entry.name != 'libjpeg-turbo' // we use our own version
         && entry.name != 'libpng' // we use our own version
@@ -1650,9 +1738,9 @@ class _RepositorySkiaThirdPartyDirectory extends _RepositoryGenericThirdPartyDir
   @override
   _RepositoryDirectory createSubdirectory(fs.Directory entry) {
     if (entry.name == 'ktx')
-      return _RepositoryReachOutDirectory(this, entry, Set<String>.from(const <String>['ktx.h', 'ktx.cpp']), 2);
+      return _RepositoryReachOutDirectory(this, entry, const <String>{'ktx.h', 'ktx.cpp'}, 2);
     if (entry.name == 'libmicrohttpd')
-      return _RepositoryReachOutDirectory(this, entry, Set<String>.from(const <String>['MHD_config.h']), 2);
+      return _RepositoryReachOutDirectory(this, entry, const <String>{'MHD_config.h'}, 2);
     if (entry.name == 'libwebp')
       return _RepositorySkiaLibWebPDirectory(this, entry);
     if (entry.name == 'libsdl')
@@ -1698,6 +1786,23 @@ class _RepositoryVulkanDirectory extends _RepositoryDirectory {
   }
 }
 
+class _RepositoryWuffsDirectory extends _RepositoryDirectory {
+  _RepositoryWuffsDirectory(_RepositoryDirectory parent, fs.Directory io) : super(parent, io);
+
+  @override
+  bool shouldRecurse(fs.IoNode entry) {
+    return entry.name != 'CONTRIBUTORS' // not linked in
+        && super.shouldRecurse(entry);
+  }
+
+  @override
+  _RepositoryDirectory createSubdirectory(fs.Directory entry) {
+    if (entry.name == 'src')
+      return _RepositoryExcludeSubpathDirectory(this, entry, const <String>['spec']);
+    return super.createSubdirectory(entry);
+  }
+}
+
 class _RepositoryRootThirdPartyDirectory extends _RepositoryGenericThirdPartyDirectory {
   _RepositoryRootThirdPartyDirectory(_RepositoryDirectory parent, fs.Directory io) : super(parent, io);
 
@@ -1715,14 +1820,22 @@ class _RepositoryRootThirdPartyDirectory extends _RepositoryGenericThirdPartyDir
         && entry.name != 'markupsafe' // build-time only
         && entry.name != 'mockito' // only used by tests
         && entry.name != 'pymock' // presumably only used by tests
-        && entry.name != 'robolectric' // testing framework for android
+        && entry.name != 'android_embedding_dependencies' // testing framework for android
         && entry.name != 'yasm' // build-time dependency only
         && entry.name != 'binutils' // build-time dependency only
         && entry.name != 'instrumented_libraries' // unused according to chinmay
         && entry.name != 'android_tools' // excluded on advice
-        && entry.name != 'android_support' // build-time only
+        && entry.name != 'androidx' // build-time only
         && entry.name != 'googletest' // only used by tests
         && entry.name != 'skia' // treated as a separate component
+        && entry.name != 'fontconfig' // not used in standard configurations
+        && entry.name != 'swiftshader' // only used on hosts for tests
+        && entry.name != 'shaderc' // only used on hosts for tests
+        && entry.name != 'glslang' // only used on hosts for tests
+        && entry.name != 'spirv_tools' // only used on hosts for tests
+        && entry.name != 'spirv_headers' // only used on hosts for tests
+        && entry.name != 'spirv_cross' // only used on hosts for tests
+        && entry.name != 'ocmock' // only used for tests
         && super.shouldRecurse(entry);
   }
 
@@ -1730,6 +1843,8 @@ class _RepositoryRootThirdPartyDirectory extends _RepositoryGenericThirdPartyDir
   _RepositoryDirectory createSubdirectory(fs.Directory entry) {
     if (entry.name == 'android_platform')
       return _RepositoryAndroidPlatformDirectory(this, entry);
+    if (entry.name == 'angle')
+      return _RepositoryAngleDirectory(this, entry);
     if (entry.name == 'boringssl')
       return _RepositoryBoringSSLDirectory(this, entry);
     if (entry.name == 'catapult')
@@ -1742,6 +1857,8 @@ class _RepositoryRootThirdPartyDirectory extends _RepositoryGenericThirdPartyDir
       throw '//third_party/freetype-android is no longer part of this client: remove it';
     if (entry.name == 'freetype2')
       return _RepositoryFreetypeDirectory(this, entry);
+    if (entry.name == 'glfw')
+      return _RepositoryGlfwDirectory(this, entry);
     if (entry.name == 'harfbuzz')
       return _RepositoryHarfbuzzDirectory(this, entry);
     if (entry.name == 'icu')
@@ -1764,6 +1881,8 @@ class _RepositoryRootThirdPartyDirectory extends _RepositoryGenericThirdPartyDir
       return _RepositoryPkgDirectory(this, entry);
     if (entry.name == 'vulkan')
       return _RepositoryVulkanDirectory(this, entry);
+    if (entry.name == 'wuffs')
+      return _RepositoryWuffsDirectory(this, entry);
     return super.createSubdirectory(entry);
   }
 }
@@ -1856,7 +1975,7 @@ class _RepositoryBoringSSLDirectory extends _RepositoryDirectory {
   _RepositoryDirectory createSubdirectory(fs.Directory entry) {
     if (entry.name == 'src')
       return _RepositoryBoringSSLSourceDirectory(this, entry);
-    return super.createSubdirectory(entry);
+    return _RepositoryBoringSSLDirectory(this, entry);
   }
 }
 
@@ -1922,7 +2041,8 @@ class _RepositoryDartThirdPartyDirectory extends _RepositoryGenericThirdPartyDir
 
   @override
   bool shouldRecurse(fs.IoNode entry) {
-    return entry.name != 'drt_resources' // test materials
+    return entry.name != 'devtools' // not linked in
+        && entry.name != 'drt_resources' // test materials
         && entry.name != 'firefox_jsshell' // testing tool for dart2js
         && entry.name != 'd8' // testing tool for dart2js
         && entry.name != 'pkg'
@@ -2001,7 +2121,14 @@ class _RepositoryFlutterDirectory extends _RepositoryDirectory {
         && entry.name != 'examples'
         && entry.name != 'build'
         && entry.name != 'ci'
-        && entry.name != 'frontend_server'
+        && entry.name != 'flutter_frontend_server'
+        // The directory that contains end to end tests.
+        // Should be excluded from the licence checks.
+        && entry.name != 'e2etests'
+        // None of the web_sdk code is linked into Flutter apps. It's only used
+        // by engine tests and tools.
+        && entry.name != 'web_sdk'
+        && entry.name != 'prebuilts'
         && super.shouldRecurse(entry);
   }
 
@@ -2011,7 +2138,132 @@ class _RepositoryFlutterDirectory extends _RepositoryDirectory {
       return _RepositoryExcludeSubpathDirectory(this, entry, const <String>['packages', 'sky_engine', 'LICENSE']); // that's the output of this script!
     if (entry.name == 'third_party')
       return _RepositoryFlutterThirdPartyDirectory(this, entry);
+    if (entry.name == 'lib')
+      return _createLibDirectoryRoot(entry, this);
+    if (entry.name == 'web_sdk')
+      return _createWebSdkDirectoryRoot(entry, this);
     return super.createSubdirectory(entry);
+  }
+}
+
+/// A specialized crawler for "github.com/flutter/engine/lib" directory.
+///
+/// It includes everything except build tools, test build artifacts, and test code.
+_RelativePathDenylistRepositoryDirectory _createLibDirectoryRoot(fs.Directory entry, _RepositoryDirectory parent) {
+  return _RelativePathDenylistRepositoryDirectory(
+    rootDir: entry,
+    denylist: <Pattern>[
+      'web_ui/lib/assets/ahem.ttf',  // this gitignored file exists only for testing purposes
+      RegExp(r'web_ui/build/.*'),  // this is compiler-generated output
+      RegExp(r'web_ui/dev/.*'),  // these are build tools; they do not end up in Engine artifacts
+      RegExp(r'web_ui/test/.*'),  // tests do not end up in Engine artifacts
+    ],
+    parent: parent,
+    io: entry,
+  );
+}
+
+/// A specialized crawler for "github.com/flutter/engine/web_sdk" directory.
+///
+/// It includes everything except the "web_engine_tester" package, which is only
+/// used to test the engine itself and is not shipped as part of the Flutter SDK.
+_RelativePathDenylistRepositoryDirectory _createWebSdkDirectoryRoot(fs.Directory entry, _RepositoryDirectory parent) {
+  return _RelativePathDenylistRepositoryDirectory(
+    rootDir: entry,
+    denylist: <Pattern>[
+      RegExp(r'web_engine_tester/.*'),  // contains test code for the engine itself
+    ],
+    parent: parent,
+    io: entry,
+  );
+}
+
+/// Walks a [rootDir] recursively, omitting paths that match a [denylist].
+///
+/// The path patterns in the [denylist] are specified relative to the [rootDir].
+class _RelativePathDenylistRepositoryDirectory extends _RepositoryDirectory {
+  _RelativePathDenylistRepositoryDirectory({
+    @required this.rootDir,
+    @required this.denylist,
+    @required _RepositoryDirectory parent,
+    @required fs.Directory io,
+  }) : super(parent, io);
+
+  /// The directory, relative to which the paths are [denylist]ed.
+  final fs.Directory rootDir;
+
+  /// Blocked path patterns.
+  ///
+  /// Paths are assumed relative to [rootDir].
+  final List<Pattern> denylist;
+
+  @override
+  bool shouldRecurse(fs.IoNode entry) {
+    final String relativePath = path.relative(entry.fullName, from: rootDir.fullName);
+    final bool denied = denylist.any(
+      (Pattern pattern) => pattern.matchAsPrefix(relativePath) != null,
+    );
+    if (denied) {
+      return false;
+    }
+    return super.shouldRecurse(entry);
+  }
+
+  @override
+  _RepositoryDirectory createSubdirectory(fs.Directory entry) {
+    return _RelativePathDenylistRepositoryDirectory(
+      rootDir: rootDir,
+      denylist: denylist,
+      parent: this,
+      io: entry,
+    );
+  }
+}
+
+class _RepositoryFuchsiaDirectory extends _RepositoryDirectory {
+  _RepositoryFuchsiaDirectory(_RepositoryDirectory parent, fs.Directory io) : super(parent, io);
+
+  @override
+  String get libraryName => 'fuchsia_sdk';
+
+  @override
+  bool get isLicenseRoot => true;
+
+  @override
+  bool shouldRecurse(fs.IoNode entry) {
+    return entry.name != 'toolchain'
+        && super.shouldRecurse(entry);
+  }
+
+  @override
+  _RepositoryDirectory createSubdirectory(fs.Directory entry) {
+    if (entry.name == 'sdk')
+      return _RepositoryFuchsiaSdkDirectory(this, entry);
+    return super.createSubdirectory(entry);
+  }
+}
+
+class _RepositoryFuchsiaSdkDirectory extends _RepositoryDirectory {
+  _RepositoryFuchsiaSdkDirectory(_RepositoryDirectory parent, fs.Directory io) : super(parent, io);
+
+  @override
+  _RepositoryDirectory createSubdirectory(fs.Directory entry) {
+    if (entry.name == 'linux' || entry.name == 'mac')
+      return _RepositoryFuchsiaSdkLinuxDirectory(this, entry);
+    return super.createSubdirectory(entry);
+  }
+}
+
+class _RepositoryFuchsiaSdkLinuxDirectory extends _RepositoryDirectory {
+  _RepositoryFuchsiaSdkLinuxDirectory(_RepositoryDirectory parent, fs.Directory io) : super(parent, io);
+
+  @override
+  bool shouldRecurse(fs.IoNode entry) {
+    return entry.name != '.build-id'
+        && entry.name != 'docs'
+        && entry.name != 'images'
+        && entry.name != 'meta'
+        && entry.name != 'tools';
   }
 }
 
@@ -2060,14 +2312,21 @@ class _RepositoryFlutterLicenseToolDirectory extends _RepositoryDirectory {
 
   @override
   bool shouldRecurse(fs.IoNode entry) {
-    return entry.name != '.dart_tool'
-        && entry.name != 'data'
+    return entry.name != 'data'
         && super.shouldRecurse(entry);
   }
 }
 
-class _RepositoryRoot extends _RepositoryDirectory {
-  _RepositoryRoot(fs.Directory io) : super(null, io);
+/// The `src/` directory created by gclient sync (a.k.a. buildroot).
+///
+/// This directory is the parent of the flutter/engine repository. The license
+/// crawler begins its search starting from this directory and recurses down
+/// from it.
+///
+/// This is not the root of the flutter/engine repository.
+/// [_RepositoryFlutterDirectory] represents that.
+class _EngineSrcDirectory extends _RepositoryDirectory {
+  _EngineSrcDirectory(fs.Directory io) : super(null, io);
 
   @override
   String get libraryName {
@@ -2083,9 +2342,9 @@ class _RepositoryRoot extends _RepositoryDirectory {
 
   @override
   bool shouldRecurse(fs.IoNode entry) {
-    return entry.name != 'testing' // only used by tests
-        && entry.name != 'build' // only used by build
+    return entry.name != 'build' // only used by build
         && entry.name != 'buildtools' // only used by build
+        && entry.name != 'build_overrides' // only used by build
         && entry.name != 'ios_tools' // only used by build
         && entry.name != 'tools' // not distributed in binary
         && entry.name != 'out' // output of build
@@ -2100,6 +2359,8 @@ class _RepositoryRoot extends _RepositoryDirectory {
       return _RepositoryRootThirdPartyDirectory(this, entry);
     if (entry.name == 'flutter')
       return _RepositoryFlutterDirectory(this, entry);
+    if (entry.name == 'fuchsia')
+      return _RepositoryFuchsiaDirectory(this, entry);
     return super.createSubdirectory(entry);
   }
 
@@ -2115,7 +2376,7 @@ class _RepositoryRoot extends _RepositoryDirectory {
 
 
 class _Progress {
-  _Progress(this.max) {
+  _Progress(this.max, {bool quiet = false}) : _quiet = quiet {
     // This may happen when a git client contains left-over empty component
     // directories after DEPS file changes.
     if (max <= 0)
@@ -2123,6 +2384,7 @@ class _Progress {
   }
 
   final int max;
+  final bool _quiet;
   int get withLicense => _withLicense;
   int _withLicense = 0;
   int get withoutLicense => _withoutLicense;
@@ -2150,11 +2412,15 @@ class _Progress {
   void update({bool flush = false}) {
     if (_lastUpdate == null || _lastUpdate.elapsedMilliseconds > 90 || flush) {
       _lastUpdate ??= Stopwatch();
-      final String line = toString();
-      system.stderr.write('\r$line');
-      if (_lastLength > line.length)
-        system.stderr.write(' ' * (_lastLength - line.length));
-      _lastLength = line.length;
+      if (_quiet) {
+        system.stderr.write('.');
+      } else {
+        final String line = toString();
+        system.stderr.write('\r$line');
+        if (_lastLength > line.length)
+          system.stderr.write(' ' * (_lastLength - line.length));
+        _lastLength = line.length;
+      }
       _lastUpdate.reset();
       _lastUpdate.start();
     }
@@ -2172,8 +2438,8 @@ class _Progress {
 Future<String> _readSignature(String goldenPath) async {
   try {
     final system.File goldenFile = system.File(goldenPath);
-    final String goldenSignature = await goldenFile.openRead()
-        .transform(utf8.decoder).transform(const LineSplitter()).first;
+    final String goldenSignature = await utf8.decoder.bind(goldenFile.openRead())
+        .transform(const LineSplitter()).first;
     final RegExp signaturePattern = RegExp(r'Signature: (\w+)');
     final Match goldenMatch = signaturePattern.matchAsPrefix(goldenSignature);
     if (goldenMatch != null)
@@ -2219,6 +2485,7 @@ Future<void> _collectLicensesForComponent(_RepositoryDirectory componentRoot, {
   String outputGoldenPath,
   bool writeSignature,
   bool force,
+  bool quiet,
 }) async {
   // Check whether the golden file matches the signature of the current contents of this directory.
   final String goldenSignature = await _readSignature(inputGoldenPath);
@@ -2228,7 +2495,7 @@ Future<void> _collectLicensesForComponent(_RepositoryDirectory componentRoot, {
     return;
   }
 
-  final _Progress progress = _Progress(componentRoot.fileCount);
+  final _Progress progress = _Progress(componentRoot.fileCount, quiet: quiet);
 
   final system.File outFile = system.File(outputGoldenPath);
   final system.IOSink sink = outFile.openWrite();
@@ -2236,6 +2503,9 @@ Future<void> _collectLicensesForComponent(_RepositoryDirectory componentRoot, {
     _writeSignature(signature, sink);
 
   final List<License> licenses = Set<License>.from(componentRoot.getLicenses(progress).toList()).toList();
+
+  if (progress.hadErrors)
+    throw 'Had failures while collecting licenses.';
 
   sink.writeln('UNUSED LICENSES:\n');
   final List<String> unusedLicenses = licenses
@@ -2249,6 +2519,38 @@ Future<void> _collectLicensesForComponent(_RepositoryDirectory componentRoot, {
   sink.writeln('USED LICENSES:\n');
   final List<License> usedLicenses = licenses.where((License license) => license.isUsed).toList();
   final List<String> output = usedLicenses.map((License license) => license.toString()).toList();
+  for (int index = 0; index < output.length; index += 1) {
+    // The strings we look for here are strings which we do not expect to see in
+    // any of the licenses we use. They either represent examples of misparsing
+    // licenses (issues we've previously run into and fixed), or licenses we
+    // know we are trying to avoid (e.g. the GPL, or licenses that only apply to
+    // test content which shouldn't get built at all).
+    // If you find that one of these tests is getting hit, and it's not obvious
+    // to you why the relevant license is a problem, please ask around (e.g. try
+    // asking Hixie). Do not merely remove one of these checks, sometimes the
+    // issues involved are relatively subtle.
+    if (output[index].contains('Version: MPL 1.1/GPL 2.0/LGPL 2.1'))
+      throw 'Unexpected trilicense block found in: ${usedLicenses[index].origin}';
+    if (output[index].contains('The contents of this file are subject to the Mozilla Public License Version'))
+      throw 'Unexpected MPL block found in: ${usedLicenses[index].origin}';
+    if (output[index].contains('You should have received a copy of the GNU'))
+      throw 'Unexpected GPL block found in: ${usedLicenses[index].origin}';
+    if (output[index].contains('BoringSSL is a fork of OpenSSL'))
+      throw 'Unexpected legacy BoringSSL block found in: ${usedLicenses[index].origin}';
+    if (output[index].contains('Contents of this folder are ported from'))
+      throw 'Unexpected block found in: ${usedLicenses[index].origin}';
+    if (output[index].contains('https://github.com/w3c/web-platform-tests/tree/master/selectors-api'))
+      throw 'Unexpected W3C content found in: ${usedLicenses[index].origin}';
+    if (output[index].contains('http://www.w3.org/Consortium/Legal/2008/04-testsuite-copyright.html'))
+      throw 'Unexpected W3C copyright found in: ${usedLicenses[index].origin}';
+    if (output[index].contains('It is based on commit'))
+      throw 'Unexpected content found in: ${usedLicenses[index].origin}';
+    if (output[index].contains('The original code is covered by the dual-licensing approach described in:'))
+      throw 'Unexpected old license reference found in: ${usedLicenses[index].origin}';
+    if (output[index].contains('must choose'))
+      throw 'Unexpected indecisiveness found in: ${usedLicenses[index].origin}';
+  }
+
   output.sort();
   sink.writeln(output.join('\n\n'));
   sink.writeln('Total license count: ${licenses.length}');
@@ -2267,9 +2569,11 @@ Future<void> main(List<String> arguments) async {
     ..addOption('src', help: 'The root of the engine source')
     ..addOption('out', help: 'The directory where output is written')
     ..addOption('golden', help: 'The directory containing golden results')
+    ..addFlag('quiet', help: 'If set, the diagnostic output is much less verbose')
     ..addFlag('release', help: 'Print output in the format used for product releases');
 
   final ArgResults argResults = parser.parse(arguments);
+  final bool quiet = argResults['quiet'];
   final bool releaseMode = argResults['release'];
   if (argResults['src'] == null) {
     print('Flutter license script: Must provide --src directory');
@@ -2295,11 +2599,12 @@ Future<void> main(List<String> arguments) async {
   try {
     system.stderr.writeln('Finding files...');
     final fs.FileSystemDirectory rootDirectory = fs.FileSystemDirectory.fromPath(argResults['src']);
-    final _RepositoryDirectory root = _RepositoryRoot(rootDirectory);
+    final _RepositoryDirectory root = _EngineSrcDirectory(rootDirectory);
 
     if (releaseMode) {
       system.stderr.writeln('Collecting licenses...');
-      final _Progress progress = _Progress(root.fileCount);
+      system.stderr.writeln('quiet: $quiet');
+      final _Progress progress = _Progress(root.fileCount, quiet: quiet);
       final List<License> licenses = Set<License>.from(root.getLicenses(progress).toList()).toList();
       if (progress.hadErrors)
         throw 'Had failures while collecting licenses.';
@@ -2342,7 +2647,7 @@ Future<void> main(List<String> arguments) async {
           // For other components, we need a clean repository that does not
           // contain any state left over from previous components.
           clearLicenseRegistry();
-          componentRoot = _RepositoryRoot(rootDirectory).subdirectories
+          componentRoot = _EngineSrcDirectory(rootDirectory).subdirectories
               .firstWhere((_RepositoryDirectory dir) => dir.name == component.name);
         }
 
@@ -2357,6 +2662,7 @@ Future<void> main(List<String> arguments) async {
             outputGoldenPath: path.join(argResults['out'], goldenFileName),
             writeSignature: component.io.name != 'flutter',
             force: forceRunAll || component.io.name == 'flutter',
+            quiet: quiet,
         );
         usedGoldens.add(goldenFileName);
       }
@@ -2377,17 +2683,3 @@ Future<void> main(List<String> arguments) async {
     system.exit(1);
   }
 }
-
-// Sanity checks:
-//
-// The following substrings shouldn't be in the output:
-//   Version: MPL 1.1/GPL 2.0/LGPL 2.1
-//   The contents of this file are subject to the Mozilla Public License Version
-//   You should have received a copy of the GNU
-//   BoringSSL is a fork of OpenSSL
-//   Contents of this folder are ported from
-//   https://github.com/w3c/web-platform-tests/tree/master/selectors-api
-//   It is based on commit
-//   The original code is covered by the dual-licensing approach described in:
-//   http://www.w3.org/Consortium/Legal/2008/04-testsuite-copyright.html
-//   must choose

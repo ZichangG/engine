@@ -2,32 +2,32 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "flutter/shell/platform/darwin/ios/framework/Source/platform_message_router.h"
+#import "flutter/shell/platform/darwin/ios/framework/Source/platform_message_router.h"
 
 #include <vector>
 
-#include "flutter/shell/platform/darwin/common/buffer_conversions.h"
+#import "flutter/shell/platform/darwin/common/buffer_conversions.h"
 
-namespace shell {
+namespace flutter {
 
 PlatformMessageRouter::PlatformMessageRouter() = default;
 
 PlatformMessageRouter::~PlatformMessageRouter() = default;
 
 void PlatformMessageRouter::HandlePlatformMessage(
-    fml::RefPtr<blink::PlatformMessage> message) const {
-  fml::RefPtr<blink::PlatformMessageResponse> completer = message->response();
+    std::unique_ptr<flutter::PlatformMessage> message) const {
+  fml::RefPtr<flutter::PlatformMessageResponse> completer = message->response();
   auto it = message_handlers_.find(message->channel());
   if (it != message_handlers_.end()) {
     FlutterBinaryMessageHandler handler = it->second;
     NSData* data = nil;
     if (message->hasData()) {
-      data = GetNSDataFromVector(message->data());
+      data = ConvertMappingToNSData(message->releaseData());
     }
     handler(data, ^(NSData* reply) {
       if (completer) {
         if (reply) {
-          completer->Complete(GetMappingFromNSData(reply));
+          completer->Complete(ConvertNSDataToMappingPtr(reply));
         } else {
           completer->CompleteEmpty();
         }
@@ -49,4 +49,4 @@ void PlatformMessageRouter::SetMessageHandler(const std::string& channel,
   }
 }
 
-}  // namespace shell
+}  // namespace flutter

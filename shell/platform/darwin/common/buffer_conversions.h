@@ -11,16 +11,16 @@
 
 #include "flutter/fml/mapping.h"
 
-namespace shell {
+namespace flutter {
 
-std::vector<uint8_t> GetVectorFromNSData(NSData* data);
+fml::MallocMapping CopyNSDataToMapping(NSData* data);
 
-NSData* GetNSDataFromVector(const std::vector<uint8_t>& buffer);
+NSData* ConvertMappingToNSData(fml::MallocMapping buffer);
 
-std::unique_ptr<fml::Mapping> GetMappingFromNSData(NSData* data);
+std::unique_ptr<fml::Mapping> ConvertNSDataToMappingPtr(NSData* data);
 
-NSData* GetNSDataFromMapping(std::unique_ptr<fml::Mapping> mapping);
+NSData* CopyMappingPtrToNSData(std::unique_ptr<fml::Mapping> mapping);
 
-}  // namespace shell
+}  // namespace flutter
 
 #endif  // FLUTTER_SHELL_PLATFORM_DARWIN_COMMON_BUFFER_CONVERSIONS_H_

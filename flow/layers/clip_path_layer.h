@@ -7,22 +7,25 @@
 
 #include "flutter/flow/layers/container_layer.h"
 
-namespace flow {
+namespace flutter {
 
 class ClipPathLayer : public ContainerLayer {
  public:
-  ClipPathLayer(Clip clip_behavior = Clip::antiAlias);
-  ~ClipPathLayer() override;
+  ClipPathLayer(const SkPath& clip_path, Clip clip_behavior = Clip::antiAlias);
 
-  void set_clip_path(const SkPath& clip_path) { clip_path_ = clip_path; }
+#ifdef FLUTTER_ENABLE_DIFF_CONTEXT
+
+  void Diff(DiffContext* context, const Layer* old_layer) override;
+
+#endif  // FLUTTER_ENABLE_DIFF_CONTEXT
 
   void Preroll(PrerollContext* context, const SkMatrix& matrix) override;
 
   void Paint(PaintContext& context) const override;
 
-#if defined(OS_FUCHSIA)
-  void UpdateScene(SceneUpdateContext& context) override;
-#endif  // defined(OS_FUCHSIA)
+  bool UsesSaveLayer() const {
+    return clip_behavior_ == Clip::antiAliasWithSaveLayer;
+  }
 
  private:
   SkPath clip_path_;
@@ -31,6 +34,6 @@ class ClipPathLayer : public ContainerLayer {
   FML_DISALLOW_COPY_AND_ASSIGN(ClipPathLayer);
 };
 
-}  // namespace flow
+}  // namespace flutter
 
 #endif  // FLUTTER_FLOW_LAYERS_CLIP_PATH_LAYER_H_

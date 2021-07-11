@@ -10,24 +10,26 @@
 #include "flutter/fml/time/time_point.h"
 #include "flutter/shell/common/vsync_waiter.h"
 
-namespace shell {
+namespace flutter {
 
+/// A |VsyncWaiter| that will fire at 60 fps irrespective of the vsync.
 class VsyncWaiterFallback final : public VsyncWaiter {
  public:
-  VsyncWaiterFallback(blink::TaskRunners task_runners);
+  explicit VsyncWaiterFallback(TaskRunners task_runners,
+                               bool for_testing = false);
 
   ~VsyncWaiterFallback() override;
 
  private:
   fml::TimePoint phase_;
-  fml::WeakPtrFactory<VsyncWaiterFallback> weak_factory_;
+  const bool for_testing_;
 
-  // |shell::VsyncWaiter|
+  // |VsyncWaiter|
   void AwaitVSync() override;
 
   FML_DISALLOW_COPY_AND_ASSIGN(VsyncWaiterFallback);
 };
 
-}  // namespace shell
+}  // namespace flutter
 
 #endif  // FLUTTER_SHELL_COMMON_VSYNC_WAITER_FALLBACK_H_

@@ -4,9 +4,9 @@
 
 import 'dart:ui';
 
-import 'package:test/test.dart';
+import 'package:litetest/litetest.dart';
 
-String top() => "top";
+String top() => 'top';
 
 class Foo {
   const Foo();
@@ -14,34 +14,30 @@ class Foo {
   double getDouble() => 1.0;
 }
 
-const Foo foo = const Foo();
+const Foo foo = Foo();
 
 void main() {
   test('PluginUtilities Callback Handles', () {
     // Top level callback.
-    final hTop = PluginUtilities.getCallbackHandle(top);
-    expect(hTop, isNotNull);
-    expect(hTop, isNot(0));
+    final CallbackHandle hTop = PluginUtilities.getCallbackHandle(top)!;
+    expect(hTop, notEquals(0));
     expect(PluginUtilities.getCallbackHandle(top), hTop);
-    final topClosure = PluginUtilities.getCallbackFromHandle(hTop);
-    expect(topClosure, isNotNull);
-    expect(topClosure(), "top");
+    final Function topClosure = PluginUtilities.getCallbackFromHandle(hTop)!;
+    expect(topClosure(), 'top');
 
     // Static method callback.
-    final hGetInt = PluginUtilities.getCallbackHandle(Foo.getInt);
-    expect(hGetInt, isNotNull);
-    expect(hGetInt, isNot(0));
+    final CallbackHandle hGetInt = PluginUtilities.getCallbackHandle(Foo.getInt)!;
+    expect(hGetInt, notEquals(0));
     expect(PluginUtilities.getCallbackHandle(Foo.getInt), hGetInt);
-    final getIntClosure = PluginUtilities.getCallbackFromHandle(hGetInt);
-    expect(getIntClosure, isNotNull);
+    final Function getIntClosure = PluginUtilities.getCallbackFromHandle(hGetInt)!;
     expect(getIntClosure(), 1);
 
     // Instance method callbacks cannot be looked up.
-    final foo = new Foo();
+    const Foo foo = Foo();
     expect(PluginUtilities.getCallbackHandle(foo.getDouble), isNull);
 
     // Anonymous closures cannot be looked up.
-    final anon = (int a, int b) => a + b;
+    final Function anon = (int a, int b) => a + b; // ignore: prefer_function_declarations_over_variables
     expect(PluginUtilities.getCallbackHandle(anon), isNull);
   });
 }
